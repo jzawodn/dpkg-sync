@@ -1,0 +1,58 @@
+#!/usr/bin/perl -w
+use strict;
+use Getopt::Long;
+
+my $debug = 0;
+my $ssh_cmd = "ssh";
+my $pkg_cmd = "dpkg --get-selections";
+my $remote_host;
+
+GetOptions(
+	"host|h=s" => \$remote_host,
+	"debug|d!" => \$debug,
+);
+
+my $list;
+
+for my $host ('localhost', $remote_host) {
+	$list->{$host} = get_list($host);
+}
+
+diff($list->{'localhost'}, $list->{$remote_host});
+
+exit;
+
+# find packages on b that are not on a
+sub diff {
+	my ($a, $b) = @_;
+	my %a = map { $_ => 1 } @$a;
+
+	for my $pkg (@$b) {
+		if (not exists $a{$pkg}) {
+			print "$pkg\n";
+		}
+	}
+}
+
+# grab list of installed packages
+sub get_list {
+	my ($host) = @_;
+	my @lines;
+	my $cmd = "$host $pkg_cmd";
+	print "cmd: $cmd\n" if $debug;
+	if (defined $host) {
+		$cmd = "$ssh_cmd $cmd";
+	}
+	if (open my $fh, "$cmd |") {
+		while (my $line = <$fh>) {
+			chomp $line;
+			next if $line !~ /\binstall\b/;
+			my ($pkg, $state) = split /\s+/, $line;
+			push @lines, $pkg;
+			print "pkg on $host: $pkg\n" if $debug;
+		}
+	}
+	return \@lines;
+}
+
+__END__
